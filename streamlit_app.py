@@ -91,8 +91,17 @@ if pedido_docnum:
         merged_df.drop(columns=['Units Missing'], inplace=True)
         merged_df.rename(columns={"Units": "Units Ordered", "Units_df2": "Units Shipped"}, inplace=True)
 
+
+        def highlight_status(row):
+            color = ''
+            if "Enviado" in row['Status']:
+                color = 'background-color: #d4edda;'  # light green
+            elif "Pendiente" in row['Status']:
+                color = 'background-color: #f8d7da;'  # light red
+            return ['' for _ in row[:-1]] + [color]  # apply color only to last column
+        
         st.subheader("📊 Product Shipping Status")
-        st.dataframe(merged_df)
+        st.dataframe(merged_df.style.apply(highlight_status, axis=1))
 
         csv = merged_df.to_csv(index=False).encode('utf-8-sig')
         st.download_button("📥 Download CSV", csv, "order_status.csv", "text/csv")
