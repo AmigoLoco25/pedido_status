@@ -10,7 +10,7 @@ password = st.text_input("Enter password", type="password")
 
 if password != st.secrets["app_password"]:
     st.stop()
-
+    
 # Title
 st.title("📦 Pedido Status")
 API_KEY = st.secrets["api_key"]
