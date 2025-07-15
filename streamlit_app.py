@@ -20,7 +20,6 @@ pedido_docnum = st.text_input("Enter Pedido docNumber (e.g., Wix250212):")
 
 if st.button("🔄 Refresh Data"):
     st.cache_data.clear()
-    st.experimental_rerun()
 
 # API Call functions
 @st.cache_data(ttl=3600)
