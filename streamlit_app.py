@@ -86,7 +86,13 @@ if pedido_docnum:
             albaran_product_df, on=['SKU', 'Product Name'], how='left', suffixes=('', '_df2'))
         merged_df['Units_df2'] = merged_df['Units_df2'].fillna(0).astype(int)
         merged_df['Units Missing'] = merged_df['Units'] - merged_df['Units_df2']
-        merged_df['Status'] = merged_df['Units Missing'].apply(lambda x: "Enviado" if x == 0 else f"Pendiente (Falta {x})")
+        merged_df['Status'] = merged_df['Units Missing'].apply(
+            lambda x: (
+                f"Enviado (Extra {abs(x)})" if x < 0
+                else "Enviado" if x == 0
+                else f"Pendiente (Falta {x})"
+            )
+        )        
         merged_df['Units_df2'] = merged_df['Units_df2'].astype(str) + '/' + merged_df['Units'].astype(str)
         merged_df.drop(columns=['Units Missing'], inplace=True)
         merged_df.rename(columns={"Units": "Units Ordered", "Units_df2": "Units Shipped"}, inplace=True)
