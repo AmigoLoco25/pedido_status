@@ -4,6 +4,7 @@ import pandas as pd
 from datetime import datetime, timezone
 import pytz
 import ast
+import io
 
 # ------------------- AUTHENTICATION -------------------
 password = st.text_input("Enter password", type="password")
@@ -111,8 +112,21 @@ if pedido_docnum:
         
         st.subheader("📊 Product Shipping Status")
         st.dataframe(merged_df.style.apply(highlight_status, axis=1))
-
-        csv = merged_df.to_csv(index=False).encode('utf-8-sig')
-        st.download_button("📥 Download CSV", csv, "order_status.csv", "text/csv")
+        
+        filename=f"{pedido_docnum}_status.xlsx"
+        excel_buffer = io.BytesIO()
+                    
+        with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+            summary_df.to_excel(writer, index=False, sheet_name='Sheet1')
+        excel_buffer.seek(0)
+                    
+                        # Download button
+        st.download_button(
+            label="📥 Download Excel",
+            data=excel_buffer,
+            file_name=filename,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+    
     else:
         st.warning("Pedido docNumber not found. Please check your input.")
