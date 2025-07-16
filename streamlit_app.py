@@ -117,7 +117,7 @@ if pedido_docnum:
         excel_buffer = io.BytesIO()
                     
         with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-            summary_df.to_excel(writer, index=False, sheet_name='Sheet1')
+            merged_df.to_excel(writer, index=False, sheet_name='Sheet1')
         excel_buffer.seek(0)
                     
                         # Download button
