@@ -48,7 +48,7 @@ def fetch_data():
 
 # Helper functions
 def get_row_index_by_docnumber(df, doc_number):
-    matches = df.index[df['docNumber'] == doc_number]
+    matches = df.index[df['docNumber'].str.lower() == doc_number.lower()]
     return int(matches[0]) if not matches.empty else None
 
 def extract_skus_from_row(df, index):
