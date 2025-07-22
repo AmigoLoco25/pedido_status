@@ -69,6 +69,7 @@ if pedido_docnum:
 
         pedido_df = extract_products_from_pedido(pedido_row)
         shipped_df = get_shipped_items(pedido_id)
+        shipped_df.rename(columns={"sku": "SKU", "name": "Product Name"}, inplace=True)
 
         # Merge on SKU
         merged_df = pedido_df.merge(shipped_df, on="SKU", how="left")
