@@ -47,6 +47,7 @@ def extract_products_from_pedido(row):
             "Product Name": item.get("name"),
             "Units Ordered": item.get("units")
         }
+        for item in items
     ])
 
 def get_shipped_items(pedido_id):
