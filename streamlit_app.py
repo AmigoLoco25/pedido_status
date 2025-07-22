@@ -10,13 +10,14 @@ if password != st.secrets["app_password"]:
     st.stop()
 
 # ------------------- CONFIG -------------------
-st.title("📦 Pedido Status via /shippeditems")
+st.title("📦 Pedido Status")
 API_KEY = st.secrets["api_key"]
 HEADERS = {"accept": "application/json", "key": API_KEY}
 
-pedido_docnum = st.text_input("Enter Pedido docNumber (e.g., Wix250212):")
 if st.button("🔄 Refresh Data"):
     st.cache_data.clear()
+
+pedido_docnum = st.text_input("Enter Pedido docNumber (e.g., SO250070):")
 
 @st.cache_data(ttl=3600)
 def fetch_pedidos():
@@ -46,7 +47,6 @@ def extract_products_from_pedido(row):
             "Product Name": item.get("name"),
             "Units Ordered": item.get("units")
         }
-        for item in items if item.get("sku")
     ])
 
 def get_shipped_items(pedido_id):
