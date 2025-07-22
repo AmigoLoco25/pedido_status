@@ -6,7 +6,6 @@ import ast
 
 # ------------------- AUTHENTICATION -------------------
 password = st.text_input("Enter password", type="password")
-
 if password != st.secrets["app_password"]:
     st.stop()
 
@@ -16,7 +15,6 @@ API_KEY = st.secrets["api_key"]
 HEADERS = {"accept": "application/json", "key": API_KEY}
 
 pedido_docnum = st.text_input("Enter Pedido docNumber (e.g., Wix250212):")
-
 if st.button("🔄 Refresh Data"):
     st.cache_data.clear()
 
@@ -42,11 +40,14 @@ def extract_products_from_pedido(row):
     items = row.get("products", [])
     if isinstance(items, str):
         items = ast.literal_eval(items)
-    return pd.DataFrame([{
-        "SKU": item.get("sku"),
-        "Product Name": item.get("name"),
-        "Units": item.get("units")
-    } for item in items if item.get("sku")])
+    return pd.DataFrame([
+        {
+            "SKU": item.get("sku"),
+            "Product Name": item.get("name"),
+            "Units": item.get("units")
+        }
+        for item in items if item.get("sku")
+    ])
 
 def get_shipped_items(pedido_id):
     url = f"https://api.holded.com/api/invoicing/v1/documents/salesorder/{pedido_id}/shippeditems"
@@ -67,20 +68,36 @@ if pedido_docnum:
 
         st.markdown(f"**Pedido**: `{pedido_docnum}` → **Albarán**: `{albaran_docnum}`")
 
+        # --- Get original pedido product lines ---
         pedido_df = extract_products_from_pedido(pedido_row)
-        shipped_df = get_shipped_items(pedido_id)
-        shipped_df.rename(columns={"sku": "SKU", "name": "Product Name"}, inplace=True)
+        if pedido_df.empty:
+            st.warning("No valid products found in Pedido.")
+            st.stop()
 
-        # Merge on SKU
-        merged_df = pedido_df.merge(shipped_df, on="SKU", how="left")
-        merged_df.rename(columns={
-            "Units": "Units Ordered",
+        # --- Get shipped items from Holded API ---
+        shipped_df = get_shipped_items(pedido_id)
+        shipped_df.rename(columns={
+            "sku": "SKU",
+            "name": "Product Name",
             "sent": "Units Sent",
             "pending": "Units Pending"
         }, inplace=True)
+
+        # Ensure all necessary columns exist
+        for col in ["SKU", "Product Name", "Units Sent", "Units Pending"]:
+            if col not in shipped_df.columns:
+                shipped_df[col] = 0
+
+        # --- Merge ---
+        merged_df = pedido_df.merge(
+            shipped_df[["SKU", "Product Name", "Units Sent", "Units Pending"]],
+            on=["SKU", "Product Name"],
+            how="left"
+        )
+
         merged_df["Units Sent"] = merged_df["Units Sent"].fillna(0).astype(int)
         merged_df["Units Pending"] = merged_df["Units Pending"].fillna(0).astype(int)
-        merged_df["Units Ordered"] = merged_df["Units Ordered"].astype(int)
+        merged_df["Units Ordered"] = merged_df["Units"].astype(int)
 
         merged_df["Status"] = merged_df["Units Pending"].apply(
             lambda x: (
@@ -90,7 +107,10 @@ if pedido_docnum:
             )
         )
 
-        merged_df["Units Shipped"] = merged_df["Units Sent"].astype(str) + "/" + merged_df["Units Ordered"].astype(str)
+        merged_df["Units Shipped"] = (
+            merged_df["Units Sent"].astype(str) + "/" + merged_df["Units Ordered"].astype(str)
+        )
+
         final_df = merged_df[["SKU", "Product Name", "Units Shipped", "Units Pending", "Status"]]
 
         def highlight_status(row):
@@ -104,7 +124,7 @@ if pedido_docnum:
         st.subheader("📊 Product Shipping Status")
         st.dataframe(final_df.style.apply(highlight_status, axis=1))
 
-        # Download
+        # --- Download Excel ---
         excel_buffer = io.BytesIO()
         with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
             final_df.to_excel(writer, index=False, sheet_name='Status')
