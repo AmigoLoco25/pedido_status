@@ -1,106 +1,96 @@
 import streamlit as st
 import requests
 import pandas as pd
-from datetime import datetime, timezone
-import pytz
-import ast
 import io
+import ast
 
 # ------------------- AUTHENTICATION -------------------
 password = st.text_input("Enter password", type="password")
 
 if password != st.secrets["app_password"]:
     st.stop()
-    
-# Title
-st.title("📦 Pedido Status")
+
+# ------------------- CONFIG -------------------
+st.title("📦 Pedido Status via /shippeditems")
 API_KEY = st.secrets["api_key"]
 HEADERS = {"accept": "application/json", "key": API_KEY}
-# Input
+
 pedido_docnum = st.text_input("Enter Pedido docNumber (e.g., Wix250212):")
 
 if st.button("🔄 Refresh Data"):
     st.cache_data.clear()
 
-# API Call functions
 @st.cache_data(ttl=3600)
-def fetch_data():
-    API_KEY = st.secrets["api_key"]
-    headers = {"accept": "application/json", "key": API_KEY}
+def fetch_pedidos():
+    url = "https://api.holded.com/api/invoicing/v1/documents/salesorder"
+    response = requests.get(url, headers=HEADERS)
+    return pd.DataFrame(response.json())
 
-    pedidos = requests.get(
-        "https://api.holded.com/api/invoicing/v1/documents/salesorder", headers=headers).json()
-    albaranes = requests.get(
-        "https://api.holded.com/api/invoicing/v1/documents/waybill", headers=headers).json()
+@st.cache_data(ttl=3600)
+def fetch_albaranes():
+    url = "https://api.holded.com/api/invoicing/v1/documents/waybill"
+    response = requests.get(url, headers=HEADERS)
+    df = pd.DataFrame(response.json())
+    df["fromID"] = df["from"].apply(lambda d: d.get("id") if isinstance(d, dict) else None)
+    return df.rename(columns={"docNumber": "Albaran DocNum", "id": "Albaran id", "fromID": "pedido_id"})
 
-    pedidos_df = pd.DataFrame(pedidos)
-    albaran_df = pd.DataFrame(albaranes)
+def get_row_by_docnumber(df, docnum):
+    matches = df[df["docNumber"].str.lower() == docnum.lower()]
+    return matches.iloc[0] if not matches.empty else None
 
-    # Clean and join the data
-    albaran_df['fromID'] = albaran_df['from'].apply(lambda d: d.get('id') if isinstance(d, dict) else None)
-    albaran_df.rename(columns={"docNumber": "Albaran DocNum", "id": "Albaran id", "fromID": "id"}, inplace=True)
+def extract_products_from_pedido(row):
+    items = row.get("products", [])
+    if isinstance(items, str):
+        items = ast.literal_eval(items)
+    return pd.DataFrame([{
+        "SKU": item.get("sku"),
+        "Product Name": item.get("name"),
+        "Units": item.get("units")
+    } for item in items if item.get("sku")])
 
-    main_df = pedidos_df[['id', "docNumber"]]
-    main_df = pd.merge(main_df, albaran_df[['id', 'Albaran DocNum', "Albaran id"]], on='id', how='left')
-    main_df.rename(columns={"id": "Pedido id"}, inplace=True)
+def get_shipped_items(pedido_id):
+    url = f"https://api.holded.com/api/invoicing/v1/documents/salesorder/{pedido_id}/shippeditems"
+    resp = requests.get(url, headers=HEADERS)
+    return pd.DataFrame(resp.json())
 
-    return pedidos_df, albaran_df, main_df
-
-# Helper functions
-def get_row_index_by_docnumber(df, doc_number):
-    matches = df.index[df['docNumber'].str.lower() == doc_number.lower()]
-    return int(matches[0]) if not matches.empty else None
-
-def extract_skus_from_row(df, index):
-    try:
-        row = df.loc[index]
-        product_list = row['products']
-        if isinstance(product_list, str):
-            product_list = ast.literal_eval(product_list)
-
-        return pd.DataFrame([
-            {'SKU': item['sku'], 'Product Name': item['name'], 'Units': item['units']}
-            for item in product_list
-        ])
-    except Exception as e:
-        st.error(f"Error extracting SKUs: {e}")
-        return pd.DataFrame()
-
-# Main logic
+# ------------------- MAIN APP -------------------
 if pedido_docnum:
-    pedidos_df, albaran_df, main_df = fetch_data()
+    pedidos_df = fetch_pedidos()
+    albaranes_df = fetch_albaranes()
 
-    index = get_row_index_by_docnumber(main_df, pedido_docnum)
+    pedido_row = get_row_by_docnumber(pedidos_df, pedido_docnum)
 
-    if index is not None:
-        albaran_docnum = main_df.loc[index, "Albaran DocNum"]
+    if pedido_row is not None:
+        pedido_id = pedido_row["id"]
+        albaran_row = albaranes_df[albaranes_df["pedido_id"] == pedido_id].head(1)
+        albaran_docnum = albaran_row["Albaran DocNum"].values[0] if not albaran_row.empty else "N/A"
+
         st.markdown(f"**Pedido**: `{pedido_docnum}` → **Albarán**: `{albaran_docnum}`")
 
-        pedido_index = get_row_index_by_docnumber(pedidos_df, pedido_docnum)
-        pedido_df = extract_skus_from_row(pedidos_df, pedido_index)
+        pedido_df = extract_products_from_pedido(pedido_row)
+        shipped_df = get_shipped_items(pedido_id)
 
-        if pd.notna(albaran_docnum):
-            albaran_df_temp = albaran_df.rename(columns={"Albaran DocNum": "docNumber"}).copy()
-            albaran_index = get_row_index_by_docnumber(albaran_df_temp, albaran_docnum)
-            albaran_product_df = extract_skus_from_row(albaran_df_temp, albaran_index)
-        else:
-            albaran_product_df = pd.DataFrame(columns=['SKU', 'Product Name', 'Units'])
+        # Merge on SKU
+        merged_df = pedido_df.merge(shipped_df, on="SKU", how="left")
+        merged_df.rename(columns={
+            "Units": "Units Ordered",
+            "sent": "Units Sent",
+            "pending": "Units Pending"
+        }, inplace=True)
+        merged_df["Units Sent"] = merged_df["Units Sent"].fillna(0).astype(int)
+        merged_df["Units Pending"] = merged_df["Units Pending"].fillna(0).astype(int)
+        merged_df["Units Ordered"] = merged_df["Units Ordered"].astype(int)
 
-        merged_df = pedido_df.merge(
-            albaran_product_df, on=['SKU', 'Product Name'], how='left', suffixes=('', '_df2'))
-        merged_df['Units_df2'] = merged_df['Units_df2'].fillna(0).astype(int)
-        merged_df['Units Missing'] = merged_df['Units'] - merged_df['Units_df2']
-        merged_df['Status'] = merged_df['Units Missing'].apply(
+        merged_df["Status"] = merged_df["Units Pending"].apply(
             lambda x: (
                 f"Enviado (Extra {abs(x)})" if x < 0
                 else "Enviado" if x == 0
                 else f"Pendiente (Falta {x})"
             )
-        )        
-        merged_df['Units_df2'] = merged_df['Units_df2'].astype(str) + '/' + merged_df['Units'].astype(str)
-        merged_df.drop(columns=['Units Missing'], inplace=True)
-        merged_df.rename(columns={"Units": "Units Ordered", "Units_df2": "Units Shipped"}, inplace=True)
+        )
 
+        merged_df["Units Shipped"] = merged_df["Units Sent"].astype(str) + "/" + merged_df["Units Ordered"].astype(str)
+        final_df = merged_df[["SKU", "Product Name", "Units Shipped", "Units Pending", "Status"]]
 
         def highlight_status(row):
             color = ''
@@ -108,25 +98,23 @@ if pedido_docnum:
                 color = 'background-color: #d4edda;'  # light green
             elif "Pendiente" in row['Status']:
                 color = 'background-color: #f8d7da;'  # light red
-            return ['' for _ in row[:-1]] + [color]  # apply color only to last column
-        
+            return ['' for _ in row[:-1]] + [color]
+
         st.subheader("📊 Product Shipping Status")
-        st.dataframe(merged_df.style.apply(highlight_status, axis=1))
-        
-        filename=f"{pedido_docnum}_status.xlsx"
+        st.dataframe(final_df.style.apply(highlight_status, axis=1))
+
+        # Download
         excel_buffer = io.BytesIO()
-                    
         with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-            merged_df.to_excel(writer, index=False, sheet_name='Sheet1')
+            final_df.to_excel(writer, index=False, sheet_name='Status')
         excel_buffer.seek(0)
-                    
-                        # Download button
+
         st.download_button(
             label="📥 Download Excel",
             data=excel_buffer,
-            file_name=filename,
+            file_name=f"{pedido_docnum}_status.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-    
+        )
+
     else:
-        st.warning("Pedido docNumber not found. Please check your input.")
+        st.warning("Pedido docNumber not found.")
