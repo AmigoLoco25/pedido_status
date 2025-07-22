@@ -111,7 +111,7 @@ if pedido_docnum:
             merged_df["Units Sent"].astype(str) + "/" + merged_df["Units Ordered"].astype(str)
         )
 
-        final_df = merged_df[["SKU", "Product Name", "Units Ordered", "Units Shipped", "Units Pending", "Status"]]
+        final_df = merged_df[["SKU", "Product Name", "Units Ordered", "Units Shipped", "Status"]]
 
         def highlight_status(row):
             color = ''
