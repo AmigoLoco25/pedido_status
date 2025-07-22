@@ -1,8 +1,11 @@
+
+python
+Copy
+Edit
 import streamlit as st
 import requests
 import pandas as pd
 import io
-import ast
 
 # ------------------- AUTHENTICATION -------------------
 password = st.text_input("Enter password", type="password")
@@ -37,19 +40,6 @@ def get_row_by_docnumber(df, docnum):
     matches = df[df["docNumber"].str.lower() == docnum.lower()]
     return matches.iloc[0] if not matches.empty else None
 
-def extract_products_from_pedido(row):
-    items = row.get("products", [])
-    if isinstance(items, str):
-        items = ast.literal_eval(items)
-    return pd.DataFrame([
-        {
-            "SKU": item.get("sku"),
-            "Product Name": item.get("name"),
-            "Units Ordered": item.get("units")
-        }
-        for item in items
-    ])
-
 def get_shipped_items(pedido_id):
     url = f"https://api.holded.com/api/invoicing/v1/documents/salesorder/{pedido_id}/shippeditems"
     resp = requests.get(url, headers=HEADERS)
@@ -69,54 +59,37 @@ if pedido_docnum:
 
         st.markdown(f"**Pedido**: `{pedido_docnum}` → **Albarán**: `{albaran_docnum}`")
 
-        # --- Get original pedido product lines ---
-        pedido_df = extract_products_from_pedido(pedido_row)
-        if pedido_df.empty:
-            st.warning("No valid products found in Pedido.")
-            st.stop()
-
-        # --- Get shipped items from Holded API ---
+        # --- Get product data from shippeditems ---
         shipped_df = get_shipped_items(pedido_id)
         shipped_df.rename(columns={
             "sku": "SKU",
             "name": "Product Name",
             "sent": "Units Sent",
-            "pending": "Units Pending"
+            "total": "Units Ordered"
         }, inplace=True)
 
-        # Ensure all necessary columns exist
-        for col in ["SKU", "Product Name", "Units Sent", "Units Pending"]:
-            if col not in shipped_df.columns:
-                shipped_df[col] = 0
+        if shipped_df.empty:
+            st.warning("No product data found in shippeditems.")
+            st.stop()
 
-
-        pedido_df["SKU"] = pedido_df["SKU"].astype(str)
+        # Normalize and calculate fields
         shipped_df["SKU"] = shipped_df["SKU"].astype(str)
-        
-        # --- Merge ---
-        merged_df = pedido_df.merge(
-            shipped_df[["SKU", "Product Name", "Units Sent", "Units Pending"]],
-            on=["SKU", "Product Name"],
-            how="left"
+        shipped_df["Units Ordered"] = shipped_df["Units Ordered"].astype(int)
+        shipped_df["Units Sent"] = shipped_df["Units Sent"].astype(int)
+
+        shipped_df["Units Shipped"] = (
+            shipped_df["Units Sent"].astype(str) + "/" + shipped_df["Units Ordered"].astype(str)
         )
 
-        merged_df["Units Sent"] = merged_df["Units Sent"].fillna(0).astype(int)
-        merged_df["Units Pending"] = merged_df["Units Pending"].fillna(0).astype(int)
-        merged_df["Units Ordered"] = merged_df["Units Ordered"].astype(int)
-
-        merged_df["Status"] = merged_df["Units Pending"].apply(
+        shipped_df["Status"] = (shipped_df["Units Sent"] - shipped_df["Units Ordered"]).apply(
             lambda x: (
-                f"Enviado (Extra {abs(x)})" if x < 0
+                f"Enviado (Extra {abs(x)})" if x > 0
                 else "Enviado" if x == 0
-                else f"Pendiente (Falta {x})"
+                else f"Pendiente (Falta {abs(x)})"
             )
         )
 
-        merged_df["Units Shipped"] = (
-            merged_df["Units Sent"].astype(str) + "/" + merged_df["Units Ordered"].astype(str)
-        )
-
-        final_df = merged_df[["SKU", "Product Name", "Units Ordered", "Units Shipped", "Status"]]
+        final_df = shipped_df[["SKU", "Product Name", "Units Ordered", "Units Shipped", "Status"]]
 
         def highlight_status(row):
             color = ''
