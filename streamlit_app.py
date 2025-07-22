@@ -89,6 +89,10 @@ if pedido_docnum:
             if col not in shipped_df.columns:
                 shipped_df[col] = 0
 
+
+        pedido_df["SKU"] = pedido_df["SKU"].astype(str)
+        shipped_df["SKU"] = shipped_df["SKU"].astype(str)
+        
         # --- Merge ---
         merged_df = pedido_df.merge(
             shipped_df[["SKU", "Product Name", "Units Sent", "Units Pending"]],
