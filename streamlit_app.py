@@ -44,7 +44,7 @@ def extract_products_from_pedido(row):
         {
             "SKU": item.get("sku"),
             "Product Name": item.get("name"),
-            "Units": item.get("units")
+            "Units Ordered": item.get("units")
         }
         for item in items if item.get("sku")
     ])
@@ -97,7 +97,7 @@ if pedido_docnum:
 
         merged_df["Units Sent"] = merged_df["Units Sent"].fillna(0).astype(int)
         merged_df["Units Pending"] = merged_df["Units Pending"].fillna(0).astype(int)
-        merged_df["Units Ordered"] = merged_df["Units"].astype(int)
+        merged_df["Units Ordered"] = merged_df["Units Ordered"].astype(int)
 
         merged_df["Status"] = merged_df["Units Pending"].apply(
             lambda x: (
@@ -111,7 +111,7 @@ if pedido_docnum:
             merged_df["Units Sent"].astype(str) + "/" + merged_df["Units Ordered"].astype(str)
         )
 
-        final_df = merged_df[["SKU", "Product Name", "Units Shipped", "Units Pending", "Status"]]
+        final_df = merged_df[["SKU", "Product Name", "Units Ordered", "Units Shipped", "Units Pending", "Status"]]
 
         def highlight_status(row):
             color = ''
