@@ -45,7 +45,7 @@ def get_shipped_items(pedido_id):
 if pedido_docnum:
     pedidos_df = fetch_pedidos()
     albaranes_df = fetch_albaranes()
-
+    
     pedido_row = get_row_by_docnumber(pedidos_df, pedido_docnum)
 
     if pedido_row is not None:
@@ -57,6 +57,7 @@ if pedido_docnum:
         else:
             albaran_display = "N/A"
 
+        pedido_docnum = pedido_docnum.upper()
         st.markdown(f"**Pedido**: `{pedido_docnum}` → **Albarán**: {albaran_display}")
 
         # --- Get product data from shippeditems ---
