@@ -50,8 +50,14 @@ if pedido_docnum:
 
     if pedido_row is not None:
         pedido_id = pedido_row["id"]
-        albaran_row = albaranes_df[albaranes_df["pedido_id"] == pedido_id].head(1)
-        albaran_docnum = albaran_row["Albaran DocNum"].values[0] if not albaran_row.empty else "N/A"
+        albaran_rows = albaranes_df[albaranes_df["pedido_id"] == pedido_id]
+        if not albaran_rows.empty:
+            albaran_docnums = albaran_rows["Albaran DocNum"].tolist()
+            albaran_display = ", ".join(f"`{docnum}`" for docnum in albaran_docnums)
+        else:
+            albaran_display = "N/A"
+
+st.markdown(f"**Pedido**: `{pedido_docnum}` → **Albaranes**: {albaran_display}")
 
         st.markdown(f"**Pedido**: `{pedido_docnum}` → **Albarán**: `{albaran_docnum}`")
 
