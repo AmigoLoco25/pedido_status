@@ -57,7 +57,7 @@ if pedido_docnum:
         else:
             albaran_display = "N/A"
 
-        st.markdown(f"**Pedido**: `{pedido_docnum}` → **Albarán**: `{albaran_display}`")
+        st.markdown(f"**Pedido**: {pedido_docnum} → **Albarán**: {albaran_display}")
 
         # --- Get product data from shippeditems ---
         shipped_df = get_shipped_items(pedido_id)
